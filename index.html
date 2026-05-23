@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>재혁쌤의 공기빵 가게 🧑‍🍳</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Jua&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Jua', 'Inter', sans-serif;
+            background-color: #1a0f08;
+            touch-action: none;
+            user-select: none;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100%;
+            max-width: 900px;
+            background-color: #fff;
+            box-shadow: 0 0 30px rgba(0,0,0,0.6);
+            position: relative;
+        }
+
+        /* 베이커리 상단 지붕막(어닝) */
+        .awning {
+            height: 32px;
+            width: 100%;
+            position: relative;
+            z-index: 30;
+            background: repeating-linear-gradient(
+                135deg,
+                #b45309,
+                #b45309 30px,
+                #fffbeb 30px,
+                #fffbeb 60px
+            );
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            border-bottom: 4px solid #78350f;
+        }
+        .awning::after {
+            content: '';
+            position: absolute;
+            bottom: -14px;
+            left: 0;
+            width: 100%;
+            height: 14px;
+            background: radial-gradient(circle at 15px 0, transparent 15px, #78350f 16px);
+            background-size: 30px 14px;
+            background-repeat: repeat-x;
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            width: 100%;
+            position: relative;
+            background-color: #fafaf9; 
+            overflow: hidden;
+        }
+        
+        #canvas-container canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; 
+            z-index: 10;
+        }
+
+        .pointer-events-auto { pointer-events: auto; }
+        
+        .wood-board {
+            background-color: #7c2d12;
+            border: 4px solid #431407;
+            box-shadow: inset 0 0 12px rgba(0,0,0,0.6), 0 6px 12px rgba(0,0,0,0.4);
+            color: white;
+        }
+        
+        /* 등급별 말풍선 디자인 */
+        .bubble-tail::after {
+            content: '';
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 15px 12px 0;
+            border-style: solid;
+        }
+        .bubble-tail-perfect::after { border-color: #fef9c3 transparent transparent transparent; }
+        .bubble-tail-great::after { border-color: #dcfce7 transparent transparent transparent; }
+        .bubble-tail-good::after { border-color: #dbeafe transparent transparent transparent; }
+        .bubble-tail-fail::after { border-color: #fee2e2 transparent transparent transparent; }
+
+        #modal {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fffbeb;
+            padding: 24px;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            text-align: center;
+            z-index: 60;
+            pointer-events: auto;
+            width: 85%;
+            max-width: 340px;
+            border: 6px solid #7c2d12;
+        }
+        
+        /* 로딩 텍스트 애니메이션 */
+        .loading-text {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <!-- 가게 어닝 -->
+    <div class="awning shrink-0"></div>
+
+    <!-- 상단 대시보드 (매출 및 시간) -->
+    <div class="wood-board p-3 shrink-0 flex justify-between items-center z-20 relative -mt-1 rounded-b-xl mx-2">
+        <div>
+            <h1 class="text-xl md:text-2xl font-bold text-yellow-300 drop-shadow">🍞 재혁쌤의 공기빵 가게</h1>
+            <p class="text-xs md:text-sm opacity-90 text-yellow-100">오늘의 매출: <span id="score" class="font-black text-white text-lg md:text-xl">0</span>원</p>
+        </div>
+        <div class="text-center bg-[#431407] px-3 md:px-4 py-1 rounded-lg border-2 border-[#1c0d02] shadow-inner">
+            <p class="text-[10px] md:text-xs text-yellow-200">남은 시간</p>
+            <p id="timer" class="text-xl md:text-2xl font-black text-red-400">60s</p>
+        </div>
+    </div>
+
+    <!-- 게임 스케치 영역 -->
+    <div id="canvas-container">
+        <div id="ui-layer">
+            <!-- 주문서 (영수증 스타일) - 왼쪽 상단으로 고정 -->
+            <div id="order-box" class="absolute top-4 left-4 w-fit bg-[#fffae6] border-[3px] border-amber-700 rounded-xl p-2 shadow-lg text-center max-w-[240px] pointer-events-auto transition-transform duration-300 hidden">
+                <p class="text-amber-900 font-bold text-xs mb-1 bg-amber-200 inline-block px-2 py-0.5 rounded-full border border-amber-400">🛎️ 손님의 주문</p>
+                <p id="order-text" class="text-lg font-extrabold text-gray-800 mt-1 tracking-tight">"온도 20°C, 습도 50%"</p>
+            </div>
+
+            <!-- 캐릭터 말풍선 대사창 -->
+            <div id="reaction-bubble" class="absolute top-[26%] left-[25%] transform -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-2xl shadow-xl z-30 text-center transition-all duration-300 hidden min-w-[120px] border-4 bubble-tail pointer-events-none">
+                <p id="reaction-text" class="text-xl md:text-2xl font-black tracking-wide"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔥 하단 수치 상태창 (크기 대폭 축소 및 분수 디자인 최적화) 🔥 -->
+    <div id="control-panel" class="shrink-0 mb-2 mx-2 bg-white/95 backdrop-blur rounded-xl p-1.5 sm:p-2 shadow-md border-2 border-gray-200 pointer-events-auto hidden z-20">
+        <div class="grid grid-cols-3 gap-1 sm:gap-2 text-center mb-1.5">
+            <div class="bg-red-50 p-1 rounded-lg border border-red-100 flex flex-col justify-center items-center">
+                <p class="text-[10px] text-red-600 font-bold tracking-tight">현재 온도</p>
+                <p class="text-lg sm:text-xl font-black text-red-500 leading-none my-1"><span id="ui-temp">20</span><span class="text-[10px]">°C</span></p>
+                <p class="text-[9px] text-red-500 font-bold tracking-tight">포화수증기량: <span id="ui-svp">14.7</span>g</p>
+            </div>
+            <div class="bg-blue-50 p-1 rounded-lg border border-blue-100 flex flex-col justify-center items-center">
+                <p class="text-[10px] text-blue-600 font-bold tracking-tight">상대습도</p>
+                <p class="text-lg sm:text-xl font-black text-blue-600 leading-none my-1"><span id="ui-humidity">0</span><span class="text-[10px]">%</span></p>
+                <!-- 진짜 분수 형태로 디자인 변경 -->
+                <div class="flex justify-center items-center gap-1 w-full mt-0.5">
+                    <div class="flex flex-col items-end text-[7px] sm:text-[8px] text-blue-500 font-bold leading-[11px] whitespace-nowrap">
+                        <span>(현재 공기 속 실제 수증기량)</span>
+                        <span>(현재 온도의 포화수증기량)</span>
+                    </div>
+                    <div class="flex flex-col items-center text-[11px] sm:text-[12px] text-blue-600 font-black leading-none">
+                        <span id="ui-fraction-actual" class="border-b-[1.5px] border-blue-400 px-1 pb-[1px] min-w-[24px] text-center">0.0</span>
+                        <span id="ui-fraction-svp" class="px-1 pt-[1px] min-w-[24px] text-center">14.7</span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 p-1 rounded-lg border border-gray-200 flex flex-col justify-center items-center">
+                <p class="text-[10px] text-gray-600 font-bold tracking-tight">수증기량</p>
+                <p class="text-lg sm:text-xl font-black text-gray-700 leading-none my-1"><span id="ui-vapor">0.0</span><span class="text-[10px]">g</span></p>
+                <p class="text-[9px] text-gray-500 font-bold tracking-tight">현재 투입량</p>
+            </div>
+        </div>
+        <button id="serve-btn" class="w-full bg-gradient-to-b from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white font-black py-1.5 sm:py-2 rounded-lg shadow-[0_2px_0_#7c2d12] active:shadow-[0_0px_0_#7c2d12] active:translate-y-[1px] transition-all text-base sm:text-lg tracking-widest border border-amber-800">
+            손님에게 서빙하기!
+        </button>
+    </div>
+
+    <!-- 🚨 오버레이 화면들 -->
+    <div id="loading-screen" class="absolute inset-0 bg-[#fafaf9] z-50 flex items-center justify-center flex-col pointer-events-auto">
+        <div class="text-5xl mb-4">👩‍🍳</div>
+        <h2 class="text-2xl font-bold text-amber-800 loading-text">가게 오픈 준비 중...</h2>
+        <p class="text-amber-600 mt-2 text-sm">이미지를 불러오고 있습니다.</p>
+    </div>
+
+    <div id="start-overlay" class="absolute inset-0 bg-black/85 flex items-center justify-center z-50 p-4 pointer-events-auto hidden">
+        <div class="bg-[#fffbeb] rounded-3xl p-5 md:p-6 max-w-lg w-full text-center shadow-2xl border-[6px] border-[#7c2d12] max-h-[95vh] overflow-y-auto">
+            <h2 class="text-3xl md:text-4xl font-black text-[#7c2d12] mb-4">📢 공기빵 가게 오픈!</h2>
+            <div class="text-left mb-6 space-y-3 bg-white p-4 md:p-5 rounded-xl border-2 border-amber-200 text-amber-900 font-medium text-xs md:text-sm leading-relaxed shadow-inner">
+                <p>🔬 <strong>상대습도 과학적 원리 안내:</strong></p>
+                <p>1. <strong>기온이 변하면:</strong> 포화 수증기량이 달라지므로 전체 공기빵 그릇의 크기가 변합니다! <span class="text-green-600 font-bold">초록 화살표</span>로 온도를 맞추세요.</p>
+                <p>2. <strong>습도를 맞추려면:</strong> <span class="text-blue-500 font-bold">파란 정수기</span>에서 물(수증기)을 드래그해 넣거나 빼며 주문받은 습도 비율(%)을 맞추세요.</p>
+                <div class="bg-red-50 p-2 rounded-lg border border-red-200 font-bold text-red-600 text-center">
+                    🚨 규칙: 온도가 1°C라도 틀리면 무조건 실패(0원)입니다!
+                </div>
+            </div>
+            <button id="start-btn" class="w-full wood-board hover:bg-[#5c220f] text-white font-black py-3 px-10 rounded-2xl text-xl active:translate-y-1 transition-transform cursor-pointer">
+                장사 시작하기
+            </button>
+        </div>
+    </div>
+
+    <div id="modal">
+        <h2 id="modal-title" class="text-3xl font-black mb-3 text-[#7c2d12]">영업 마감</h2>
+        <p id="modal-desc" class="text-[#431407] font-bold text-lg mb-6 leading-snug"></p>
+        <button id="modal-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-6 rounded-xl shadow-[0_4px_0_#7c2d12] active:translate-y-1 transition-all text-xl border-2 border-amber-700 cursor-pointer">
+            다음 날 장사 시작
+        </button>
+    </div>
+</div>
+
+<script>
+    // 과학 교과서 기준 온도별 포화 수증기량 데이터 테이블 (g/kg)
+    const svpTable = {
+        0: 3.8, 5: 5.4, 10: 7.6, 15: 10.6, 20: 14.7, 25: 20.0, 30: 27.1, 35: 39.6, 40: 50.0
+    };
+    const temps = Object.keys(svpTable).map(Number).sort((a, b) => a - b);
+
+    // 실패 반응 대사 목록
+    const failMents = ["엄.. 💧", "퉤!", "우웩!", "이래서 이과는 안돼"];
+
+    // 게임 상태 변수
+    let score = 0; 
+    let timeLeft = 60;
+    let gameInterval;
+    let isGameOver = false;
+    let isAnimating = false; 
+
+    let reactionGrade = "IDLE"; 
+    let currentCustomerType = "GIRL"; 
+
+    // 목표치 변수
+    let targetTemp = 20;
+    let targetHumidity = 50;
+
+    // 사용자 조작 변수
+    let currentTempIdx = 4; 
+    let currentTemp = temps[currentTempIdx];
+    let actualVapor = 0.0;
+    let dragAction = "none"; 
+
+    // 캐싱할 DOM 노드들
+    const elOrderText = document.getElementById('order-text');
+    const elOrderBox = document.getElementById('order-box');
+    const elUiTemp = document.getElementById('ui-temp');
+    const elUiHumidity = document.getElementById('ui-humidity');
+    const elUiVapor = document.getElementById('ui-vapor');
+    const elScore = document.getElementById('score');
+    const elTimer = document.getElementById('timer');
+    const elServeBtn = document.getElementById('serve-btn');
+    const elStartBtn = document.getElementById('start-btn');
+    const elStartOverlay = document.getElementById('start-overlay');
+    const elLoadingScreen = document.getElementById('loading-screen');
+    const elControlPanel = document.getElementById('control-panel');
+    
+    const elUiSvp = document.getElementById('ui-svp');
+    const elUiFractionActual = document.getElementById('ui-fraction-actual');
+    const elUiFractionSvp = document.getElementById('ui-fraction-svp');
+
+    const elReactionBubble = document.getElementById('reaction-bubble');
+    const elReactionText = document.getElementById('reaction-text');
+
+    const elModal = document.getElementById('modal');
+    const elModalTitle = document.getElementById('modal-title');
+    const elModalDesc = document.getElementById('modal-desc');
+    const elModalBtn = document.getElementById('modal-btn');
+
+    // 🚨 이미지 로딩 강력 안정화 (구글 드라이브 다이렉트 호스팅 우회)
+    function getGdriveUrl(id) {
+        return `https://lh3.googleusercontent.com/d/${id}`;
+    }
+
+    // 🚨 무한 로딩 방지: 이미지를 불러오는데 4초 이상 걸리면 강제로 게임 화면을 엽니다.
+    setTimeout(() => {
+        if (!elLoadingScreen.classList.contains('hidden')) {
+            elLoadingScreen.classList.add('hidden');
+            elStartOverlay.classList.remove('hidden');
+            elOrderBox.classList.remove('hidden');
+            elControlPanel.classList.remove('hidden');
+        }
+    }, 4000);
+
+    // p5.js 게임 렌더링 엔진 코어
+    const sketch = (p) => {
+        let cx, cy; 
+        let tankX, tankY, tankW, tankH; 
+        let btnLeftX, btnRightX, btnY; 
+
+        let imgBg;
+        let cImgs = {
+            GIRL: { IDLE: null, PERFECT: null, FAIL: null },
+            BOY: { IDLE: null, PERFECT: null, FAIL: null }
+        };
+
+        p.preload = function() {
+            // 이미지 로딩 실패 시 에러 콜백
+            const onErr = () => {
+                console.warn("이미지 로드 실패. (구글 드라이브 권한을 확인해주세요)");
+                elLoadingScreen.classList.add('hidden');
+                elStartOverlay.classList.remove('hidden');
+                elOrderBox.classList.remove('hidden');
+                elControlPanel.classList.remove('hidden');
+            };
+
+            // 배경 로드
+            imgBg = p.loadImage(getGdriveUrl('1SXUUxZUxw_xSQPD5cPP0sboEA8jG2lvP'), () => {}, onErr);
+            
+            // 여자아이 로드
+            cImgs.GIRL.IDLE = p.loadImage(getGdriveUrl('19dkytR42JLw_e-m2FGeWgW_o0VfS9eMe'), () => {}, onErr);
+            cImgs.GIRL.PERFECT = p.loadImage(getGdriveUrl('1cg7YcJtmV3nDU9EuHPbvVwDTS6rc6i_H'), () => {}, onErr);
+            cImgs.GIRL.FAIL = p.loadImage(getGdriveUrl('1gROAfrJPHvtXD3xkCwFRMRaEWYlFlkUw'), () => {}, onErr);
+            
+            // 남자아이 로드
+            cImgs.BOY.IDLE = p.loadImage(getGdriveUrl('1m8Ki14Cowts2BA0-DeHlYMnC-4vCmGWP'), () => {}, onErr);
+            cImgs.BOY.PERFECT = p.loadImage(getGdriveUrl('1DMYp62-xvHtH8FS9yMWdivrRKewYvsyC'), () => {}, onErr);
+            cImgs.BOY.FAIL = p.loadImage(getGdriveUrl('15Ma2eFiZggbahrNYm1KXzWRi6KroVLoW'), () => {}, onErr);
+        };
+
+        p.setup = function() {
+            let container = document.getElementById('canvas-container');
+            let canvas = p.createCanvas(container.clientWidth, container.clientHeight);
+            canvas.parent('canvas-container');
+            p.textAlign(p.CENTER, p.CENTER);
+            updateLayout();
+
+            // 이미지 로딩 완료 처리
+            elLoadingScreen.classList.add('hidden');
+            elStartOverlay.classList.remove('hidden');
+            elOrderBox.classList.remove('hidden');
+            elControlPanel.classList.remove('hidden');
+
+            const resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                    p.resizeCanvas(entry.contentRect.width, entry.contentRect.height);
+                    updateLayout();
+                }
+            }
+        });
+        resizeObserver.observe(container);
+    };
+
+    p.windowResized = function() {
+        let container = document.getElementById('canvas-container');
+        p.resizeCanvas(container.clientWidth, container.clientHeight);
+        updateLayout();
+    };
+
+    function updateLayout() {
+        cx = p.width / 2 + 15; 
+        cy = p.height / 2 + 10; 
+        
+        tankW = p.min(65, p.width * 0.14);
+        tankH = 130;
+        tankX = p.width - tankW - 10;
+        tankY = cy - tankH / 2 + 10;
+    }
+
+    p.draw = function() {
+        p.background(250);
+            
+            if(imgBg) {
+                p.image(imgBg, 0, 0, p.width, p.height);
+            }
+            
+            drawCustomer();
+            drawCounter();
+            drawBread();
+            drawTank();
+            drawInteractions();
+            updateUI(); 
+        };
+
+        function drawCounter() {
+        p.push();
+        p.fill(92, 51, 23); 
+        p.noStroke();
+        p.rect(0, cy + 95, p.width, p.height - (cy + 95));
+        p.fill(139, 69, 19); 
+        p.rect(0, cy + 95, p.width, 16);
+        
+        p.fill(210, 180, 140, 150);
+        let boardW = p.map(svpTable[40], 3.8, 50, 50, 130) * 2.6;
+        p.ellipse(cx, cy + 100, boardW, 55);
+        p.pop();
+    }
+
+    function drawCustomer() {
+        p.push();
+        let custX = p.width / 4 - 10;
+        let custY = cy + 20; 
+
+        let stateKey = "IDLE";
+        if (reactionGrade === "PERFECT") stateKey = "PERFECT";
+        else if (reactionGrade === "FAIL") stateKey = "FAIL";
+
+        let targetImg = cImgs[currentCustomerType][stateKey];
+        
+        if(targetImg) {
+            p.imageMode(p.CENTER);
+            let scaleRatio = (p.height * 0.65) / targetImg.height;
+            let finalW = targetImg.width * scaleRatio;
+            let finalH = targetImg.height * scaleRatio;
+            
+            let bounce = 0;
+            if (reactionGrade === "PERFECT") {
+                bounce = p.sin(p.frameCount * 0.3) * 12; 
+            }
+            
+            p.image(targetImg, custX, custY + bounce, finalW, finalH);
+        }
+        p.pop();
+    }
+
+    function drawBread() {
+            let maxVapor = svpTable[currentTemp];
+            let breadRadius = p.map(maxVapor, 3.8, 50, 45, 125);
+            
+            p.push();
+            p.fill(0, 0, 0, 35); 
+            p.noStroke();
+            p.ellipse(cx, cy + breadRadius * 0.9, breadRadius * 2.1, breadRadius * 0.45);
+
+            p.stroke(160, 82, 45);
+            p.strokeWeight(7);
+            p.fill(254, 243, 199); 
+            p.ellipse(cx, cy, breadRadius * 2, breadRadius * 2);
+            
+            p.noStroke();
+            let currentSVP = svpTable[currentTemp];
+            let waterRatio = p.min(actualVapor / currentSVP, 1.0);
+            let waterRadius = breadRadius * Math.sqrt(waterRatio); 
+            
+            if (actualVapor > currentSVP) p.fill(239, 68, 68, 210); 
+            else p.fill(59, 130, 246, 210); 
+            
+            p.ellipse(cx, cy, waterRadius * 2, waterRadius * 2);
+
+            if(waterRadius > 8) {
+                p.fill(255, 255, 255, 130);
+                p.ellipse(cx - waterRadius * 0.3, cy - waterRadius * 0.3, waterRadius * 0.7, waterRadius * 0.45);
+            }
+
+            btnY = cy;
+            btnLeftX = cx - breadRadius - 32;
+            btnRightX = cx + breadRadius + 32;
+            
+            let wave = p.sin(p.frameCount * 0.12) * 4;
+            p.fill(22, 163, 74); 
+            p.stroke(255); 
+            p.strokeWeight(2.5);
+            p.triangle(btnLeftX - wave, btnY, btnLeftX + 22 - wave, btnY - 16, btnLeftX + 22 - wave, btnY + 16);
+            p.triangle(btnRightX + wave, btnY, btnRightX - 22 + wave, btnY - 16, btnRightX - 22 + wave, btnY + 16);
+            p.pop();
+        }
+
+        function drawTank() {
+            p.push();
+            p.fill(140); 
+            p.noStroke();
+            p.rect(tankX + 12, tankY + tankH, tankW - 24, 15);
+            
+            p.fill(226, 232, 240);
+            p.stroke(71, 85, 105); 
+            p.strokeWeight(2);
+            p.rect(tankX, tankY, tankW, tankH, 8);
+            
+            p.fill(37, 99, 235); 
+            p.noStroke();
+            p.rect(tankX + 4, tankY + 24, tankW - 10, tankH - 30, 4);
+            
+            p.fill(71, 85, 105);
+            p.rect(tankX - 10, tankY + tankH / 2 - 2, 10, 12, 2);
+            
+            p.fill(30); 
+            p.textSize(12);
+            p.text("WATER", tankX + tankW / 2, tankY - 12);
+            p.pop();
+        }
+
+        function drawInteractions() {
+            p.push();
+            let maxVapor = svpTable[currentTemp];
+            let breadRadius = p.map(maxVapor, 3.8, 50, 45, 125);
+
+            if (dragAction === "pouring") {
+                p.stroke(37, 99, 235, 220);
+                p.strokeWeight(9);
+                p.line(tankX, tankY + tankH / 2 + 4, p.mouseX, p.mouseY);
+                if (p.dist(p.mouseX, p.mouseY, cx, cy) < breadRadius) {
+                    p.noStroke(); p.fill(29, 78, 216); p.textSize(16);
+                    p.text("수증기 주입..", p.mouseX, p.mouseY - 25);
+                }
+            } else if (dragAction === "draining") {
+                p.stroke(220, 38, 38, 220);
+                p.strokeWeight(9);
+                p.line(cx, cy, p.mouseX, p.mouseY);
+                if (p.dist(p.mouseX, p.mouseY, cx, cy) > breadRadius) {
+                    p.noStroke(); p.fill(185, 28, 28); p.textSize(16);
+                    p.text("환기(방출) 중..", p.mouseX, p.mouseY - 25);
+                }
+            }
+            p.pop();
+        }
+
+        p.mousePressed = function() {
+            if (!elLoadingScreen.classList.contains('hidden') || isGameOver || isAnimating) return;
+            
+            if (p.dist(p.mouseX, p.mouseY, btnLeftX + 11, btnY) < 35) {
+                if (currentTempIdx > 0) currentTempIdx--;
+                currentTemp = temps[currentTempIdx];
+            } else if (p.dist(p.mouseX, p.mouseY, btnRightX - 11, btnY) < 35) {
+                if (currentTempIdx < temps.length - 1) currentTempIdx++;
+                currentTemp = temps[currentTempIdx];
+            }
+
+            let breadRadius = p.map(svpTable[currentTemp], 3.8, 50, 45, 125);
+            if (p.mouseX >= tankX - 15 && p.mouseX <= tankX + tankW && p.mouseY >= tankY && p.mouseY <= tankY + tankH) {
+                dragAction = "pouring";
+            } else if (p.dist(p.mouseX, p.mouseY, cx, cy) < breadRadius && actualVapor > 0) {
+                dragAction = "draining";
+            }
+        };
+
+        p.mouseDragged = function() {
+            if (isGameOver || isAnimating) return;
+            let breadRadius = p.map(svpTable[currentTemp], 3.8, 50, 45, 125);
+
+            if (dragAction === "pouring") {
+                if (p.dist(p.mouseX, p.mouseY, cx, cy) < breadRadius) {
+                    actualVapor = p.min(50.0, actualVapor + 0.35); 
+                }
+            } else if (dragAction === "draining") {
+                if (p.dist(p.mouseX, p.mouseY, cx, cy) > breadRadius) {
+                    actualVapor = p.max(0.0, actualVapor - 0.45); 
+                }
+            }
+        };
+
+        p.mouseReleased = function() {
+            dragAction = "none";
+        };
+    };
+    new p5(sketch);
+
+    // 실시간 수치 데이터 연동
+    function updateUI() {
+        elUiTemp.innerText = currentTemp;
+        elUiVapor.innerText = actualVapor.toFixed(1);
+        
+        let currentSVP = svpTable[currentTemp];
+        let calcHumidity = Math.round((actualVapor / currentSVP) * 100);
+        
+        elUiHumidity.innerText = calcHumidity;
+        elUiSvp.innerText = currentSVP.toFixed(1);
+        elUiFractionActual.innerText = actualVapor.toFixed(1);
+        elUiFractionSvp.innerText = currentSVP.toFixed(1);
+        
+        if (calcHumidity === targetHumidity && currentTemp === targetTemp) {
+            elUiHumidity.parentElement.className = "bg-green-100 p-1 rounded-lg border-2 border-green-400 relative flex flex-col justify-center items-center";
+            elUiTemp.parentElement.className = "bg-green-100 p-1 rounded-lg border-2 border-green-400 flex flex-col justify-center items-center";
+        } else {
+            elUiHumidity.parentElement.className = "bg-blue-50 p-1 rounded-lg border border-blue-100 relative flex flex-col justify-center items-center";
+            elUiTemp.parentElement.className = "bg-red-50 p-1 rounded-lg border border-red-100 flex flex-col justify-center items-center";
+        }
+    }
+
+    function generateOrder() {
+        elOrderBox.classList.add('scale-95', 'opacity-70');
+        
+        setTimeout(() => {
+            let randIdx = Math.floor(Math.random() * (temps.length - 1)); 
+            targetTemp = temps[randIdx];
+            let humids = [30, 40, 50, 60, 70, 80]; 
+            targetHumidity = humids[Math.floor(Math.random() * humids.length)]; 
+
+            elOrderText.innerText = `"온도 ${targetTemp}°C, 습도 ${targetHumidity}%"`;
+            
+            currentCustomerType = Math.random() > 0.5 ? "GIRL" : "BOY";
+            currentTempIdx = temps.indexOf(20);
+            currentTemp = 20;
+            actualVapor = 0.0;
+            reactionGrade = "IDLE"; 
+            
+            elOrderBox.classList.remove('scale-95', 'opacity-70');
+        }, 250);
+    }
+
+    elServeBtn.addEventListener('click', () => {
+        if(isGameOver || isAnimating) return;
+        isAnimating = true; 
+
+        let currentSVP = svpTable[currentTemp];
+        let calcHumidity = Math.round((actualVapor / currentSVP) * 100);
+        
+        let isTempCorrect = (currentTemp === targetTemp);
+        let humDiff = Math.abs(calcHumidity - targetHumidity);
+
+        elReactionBubble.className = "absolute top-[26%] left-[25%] transform -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-2xl shadow-xl z-30 text-center transition-all duration-300 border-4 bubble-tail pointer-events-none";
+        
+        if (!isTempCorrect) {
+            reactionGrade = "FAIL";
+        } else {
+            if (humDiff === 0) reactionGrade = "PERFECT";
+            else if (humDiff <= 2) reactionGrade = "GREAT";
+            else if (humDiff <= 5) reactionGrade = "GOOD";
+            else reactionGrade = "FAIL";
+        }
+
+        if (reactionGrade === "PERFECT") {
+            elReactionText.innerText = "야르~!!";
+            elReactionText.className = "text-xl font-black text-amber-700 animate-bounce";
+            elReactionBubble.classList.add('bg-yellow-100', 'border-yellow-400', 'bubble-tail-perfect');
+            score += 1000;
+            timeLeft = Math.min(60, timeLeft + 6); 
+        } else if (reactionGrade === "GREAT") {
+            elReactionText.innerText = "이 맛이지~!";
+            elReactionText.className = "text-lg font-black text-green-700";
+            elReactionBubble.classList.add('bg-green-100', 'border-green-400', 'bubble-tail-great');
+            score += 800;
+            timeLeft = Math.min(60, timeLeft + 3); 
+        } else if (reactionGrade === "GOOD") {
+            elReactionText.innerText = "뭐 낫배드네..";
+            elReactionText.className = "text-lg font-black text-blue-700";
+            elReactionBubble.classList.add('bg-blue-100', 'border-blue-400', 'bubble-tail-good');
+            score += 500;
+            timeLeft = Math.min(60, timeLeft + 1); 
+        } else {
+            elReactionText.innerText = failMents[Math.floor(Math.random() * failMents.length)];
+            elReactionText.className = "text-lg font-black text-red-700";
+            elReactionBubble.classList.add('bg-red-100', 'border-red-400', 'bubble-tail-fail');
+        }
+        
+        elScore.innerText = score.toLocaleString();
+
+        elReactionBubble.style.opacity = '0';
+        elReactionBubble.style.transform = 'translate(-50%, -30%) scale(0.6)';
+        elReactionBubble.classList.remove('hidden');
+        
+        setTimeout(() => {
+            elReactionBubble.style.opacity = '1';
+            elReactionBubble.style.transform = 'translate(-50%, -50%) scale(1)';
+        }, 15);
+
+        setTimeout(() => {
+            elReactionBubble.classList.add('hidden');
+            isAnimating = false;
+            generateOrder();
+        }, 1600);
+    });
+
+    function updateTimer() {
+        if (isGameOver || isAnimating) return; 
+        timeLeft--;
+        elTimer.innerText = `${timeLeft}s`;
+        if (timeLeft <= 10) elTimer.className = "text-xl md:text-2xl font-black text-red-500 animate-pulse";
+        else elTimer.className = "text-xl md:text-2xl font-black text-red-400";
+
+        if (timeLeft <= 0) endGame();
+    }
+
+    function startGame() {
+        score = 0;
+        timeLeft = 60;
+        isGameOver = false;
+        isAnimating = false;
+        reactionGrade = "IDLE";
+        
+        elScore.innerText = "0";
+        elTimer.innerText = "60s";
+        
+        elStartOverlay.classList.add('hidden');
+        elModal.style.display = "none";
+        elReactionBubble.classList.add('hidden');
+        
+        generateOrder();
+        
+        clearInterval(gameInterval);
+        gameInterval = setInterval(updateTimer, 1000);
+    }
+
+    function endGame() {
+        isGameOver = true;
+        clearInterval(gameInterval);
+        elModalDesc.innerHTML = `오늘의 영업이 마감되었습니다!<br><br>💵 획득 매출: <span class="text-2xl font-black text-amber-600">${score.toLocaleString()}원</span>`;
+        elModal.style.display = "block";
+    }
+
+    elStartBtn.addEventListener('click', startGame);
+    elModalBtn.addEventListener('click', startGame);
+</script>
+</body>
+</html>
